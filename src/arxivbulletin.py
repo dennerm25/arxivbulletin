@@ -91,7 +91,7 @@ class arxivbulletin:
         OAI = '{http://www.openarchives.org/OAI/2.0/}'
         ARXIV = '{http://arxiv.org/OAI/arXivRaw/}'
 
-        records_df = pd.DataFrame(columns=['title','abstract', 'abstract_title_concats', 'url','authors', 'date'])
+        records_df = pd.DataFrame(columns=['title','abstract', 'abstract_title_concats', 'url','authors', 'date_v1'])
 
         for cat in self.categories:
             # Fetch from arXiv API for each category
