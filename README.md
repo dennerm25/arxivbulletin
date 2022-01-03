@@ -1,11 +1,11 @@
-# ArXiv Scraper
-This python tool allows to filter ArXiv papers based on keywords and author names, and report them via terminal or email.
+# ArXiv Bulletin
+This python tool allows to filter ArXiv papers based on keywords and author names, and report them via terminal or email. Thank you to arXiv for use of its open access interoperability.
 
 ## Setup
 
  - **config.py**: Personalization file, containing four possible entries:
-	- *name*: Your name, to personalize ArXiv Scrapers messages
-    - *email*: Your email address, to send ArXiv Scrapers messages by mail. If "None", the messages will be printed to the terminal
+	- *name*: Your name, to personalize ArXiv Bulletin messages
+    - *email*: Your email address, to send ArXiv Bulletin messages by mail. If "None", the messages will be printed to the terminal
     - *password*: Your email password, to send emails without user input. If "None", a user prompt will require a password entry.
     - *categories*: A list of the ArXiv categories that should be checked ([For a list of all categories take a look here](https://arxiv.org/category_taxonomy))
 
@@ -13,19 +13,19 @@ This python tool allows to filter ArXiv papers based on keywords and author name
  - **keyauthors.txt** (optional): A row-wise collection of author names, used to filter ArXiv papers. If not provided and no keywords (see above) are available, results are not filtered.
 
 ### Receiving ArXiv messages per mail
-ArXiv Scraper can send personalized messages to your mail account, currently restricted to Google Mail. A new account can be created [here](https://accounts.google.com/signup). In your account settings, make sure to set *Allow less secure apps* to *on*. Note that currently there is no workaround for storing the email password in plain text or requiring user input.
+ArXiv Bulletin can send personalized messages to your mail account, currently restricted to Google Mail. A new account can be created [here](https://accounts.google.com/signup). In your account settings, make sure to set *Allow less secure apps* to *on*. Note that currently there is no workaround for storing the email password in plain text or requiring user input.
 
 ## Usage
 
-Import the arxivscraper class
+Import the arxivbulletin class
 ```
-from arxivscraper import arxivscraper
+from arxivbulletin import arxivbulletin
 ```
-Create arxivscraper object
+Create arxivbulletin object
 ```
-arxivsummary = arxivscraper(start_date, end_date)
+arxivsummary = arxivbulletin(start_date, end_date)
 ```
-where `start_date` and `end_date` are optional `datetime` objects specifying the timespan to be checked for relevant papers. If `start_date` and `end_date` are not provided, ArXivScraper uses the current date.
+where `start_date` and `end_date` are optional `datetime` objects specifying the timespan to be checked for relevant papers. If `start_date` and `end_date` are not provided, ArXivBulletin uses the current date.
 
 Get summary based on (optional) keywords and keyauthors
 
@@ -42,8 +42,8 @@ where `filenamerec` and `filenamefil` are optional parameters for storing all Ar
 
 In order to obtain a daily selection of ArXiv submissions based on your preferences, create a file `main.py`, containing
 ```
-from arxivscraper import arxivscraper
-arxivsummary = arxivscraper()
+from arxivbulletin import arxivbulletin
+arxivsummary = arxivbulletin()
 arxivsummary.send_report()
 ```
 and run from the terminal once a day.
@@ -52,7 +52,7 @@ and run from the terminal once a day.
 In order to automate the execution of, for instance, `main.py` above, MacOS users can rely on `cron`. Running `crontab -e` in a terminal opens a cron file where a job can be added by `esc` + `i`. Adding the following line
 
 ```
-* * * * * /PathToPython /path/to/file/ArXivScraper/main.py
+* * * * * /PathToPython /path/to/file/ArXivBulletin/main.py
 ```
 runs the file `main.py` every minute. The timing can be adjusted by replacing the appropriate `*`, whereby the
 
@@ -72,4 +72,5 @@ More information (including troubleshooting and an untested option for windows u
 
 ## License
 
+This project is licensed under the MIT License - see the LICENSE file for details.
 

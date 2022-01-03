@@ -3,7 +3,7 @@
 # Inspired by:
 # https://github.com/mahdisadjadi/arxivscraper
 # https://github.com/blairbilodeau/arxiv-biorxiv-search
-
+# Thank you to arXiv for use of its open access interoperability
 ######################################################################
 
 # Packages
@@ -12,22 +12,28 @@ import os
 import xml.etree.ElementTree as ET
 import gc
 import pandas as pd
-import urllib, urllib.request
 import smtplib, ssl
 import sys
 import numpy as np
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+try: #python3
+    from urllib.request import urlopen
+except: #python2
+    from urllib2 import urlopen
 
 # Config file
-import config as cfg
+try:
+    import config as cfg
+except:
+    print("Please provide config file.")
 
 # Custom exception if no submissions were found
 class SubmissionError(Exception):
     pass
 
-# Arxiv Scraper class
-class arxivscraper:
+# Arxiv Bulletin class
+class arxivbulletin:
 
     def __init__(self, start=datetime.date.today(), end=datetime.date.today()):
         # Begin of timespan
@@ -61,7 +67,7 @@ class arxivscraper:
         # open and read from user provided files
         try:
             results = []
-            with open(os.path.join(self.path, fn)) as f:
+            with open(os.path.join(os.path.split(self.path)[0], fn)) as f:
                 for line in f:
                     results.append(line.strip())
             return results
@@ -72,72 +78,71 @@ class arxivscraper:
 
     def extract_data(self, metadata, key):
         # extract human readable text from metadata
-        ARXIV = '{http://arxiv.org/OAI/arXiv/}'
-        return [meta.find(ARXIV + key).text.strip().lower().replace('\n', ' ') for meta in metadata]
+        ARXIV = '{http://arxiv.org/OAI/arXivRaw/}'
+        return [meta.find(ARXIV + key).text.strip().replace('\n', ' ') for meta in metadata]
 
-    def extract_authorlist(self, author_lists):
-        ARXIV = '{http://arxiv.org/OAI/arXiv/}'
+    def extract_authorlist(self, metadata):
+        ARXIV = '{http://arxiv.org/OAI/arXivRaw/}'
 
-        ## extract first and last names, clean them, and put them together to make human readable
-        last_name_lists = [[author.find(ARXIV + 'keyname').text.lower() for author in author_list] for author_list in author_lists]
-        first_name_meta_lists = [[author.find(ARXIV + 'forenames') for author in author_list] for author_list in author_lists]
-        first_name_lists = [['' if name == None else name.text.lower() for name in first_name_meta_list] for first_name_meta_list in first_name_meta_lists]
-        full_name_temp_lists = [zip(a,b) for a,b in zip(first_name_lists, last_name_lists)]
-        full_name_lists = [[a+' '+b for a,b in full_name_temp_list] for full_name_temp_list in full_name_temp_lists]
-        return full_name_lists
+        return [meta.find(ARXIV + 'authors').text.strip().lower().replace('\n', ' ') for meta in metadata]
 
     def get_submissions(self):
 
         OAI = '{http://www.openarchives.org/OAI/2.0/}'
-        ARXIV = '{http://arxiv.org/OAI/arXiv/}'
+        ARXIV = '{http://arxiv.org/OAI/arXivRaw/}'
 
         records_df = pd.DataFrame(columns=['title','abstract', 'abstract_title_concats', 'url','authors', 'date'])
 
         for cat in self.categories:
             # Fetch from arXiv API for each category
-            url = 'http://export.arxiv.org/oai2?verb=ListRecords&from=' + str(self.start) + '&until=' + str(self.end) + '&metadataPrefix=arXiv&set=' + cat
-            data = urllib.request.urlopen(url)
+            url = 'http://export.arxiv.org/oai2?verb=ListRecords&from=' + str(self.start) + '&until=' + str(self.end) + '&metadataPrefix=arXivRaw&set=' + cat
+            data = urlopen(url)
             xml = data.read() # get raw xml data from server
             gc.collect()
             xml_root = ET.fromstring(xml)
             records = xml_root.findall(OAI + 'ListRecords/' + OAI + 'record') # list of all records from xml tree
 
             ## extract metadata for each record
-            metadata = [record.find(OAI + 'metadata').find(ARXIV + 'arXiv') for record in records]
+            metadata = [record.find(OAI + 'metadata').find(ARXIV + 'arXivRaw') for record in records]
 
             ## use metadata to get info for each record
             titles = self.extract_data(metadata, 'title')
             abstracts = self.extract_data(metadata, 'abstract')
-            created = self.extract_data(metadata, 'created')
             urls = ['https://arxiv.org/abs/' + link for link in self.extract_data(metadata, 'id')]
-            author_lists = [meta.findall(ARXIV + 'authors/' + ARXIV + 'author') for meta in metadata]
-            abstract_title_concats = [title+'. '+abstract for title,abstract in zip(titles,abstracts)]
-            full_name_lists = self.extract_authorlist(author_lists)
+            date_v1_submission = [str(datetime.datetime.strptime(meta.find(ARXIV + 'version').find(ARXIV + 'date').text, '%a, %d %b %Y %H:%M:%S %Z').date()) for meta in metadata]
+            author_lists = self.extract_authorlist(metadata)
+            abstract_title_concats = [title.lower() +'. '+abstract.lower() for title,abstract in zip(titles,abstracts)]
 
             ## compile all info into big dataframe
-            records_data = list(zip(titles, abstracts, abstract_title_concats, urls, full_name_lists, created))
-            records_df_tmp = pd.DataFrame(records_data,columns=['title','abstract', 'abstract_title_concats', 'url','authors', 'date'])
+            records_data = list(zip(titles, abstracts, abstract_title_concats, urls, author_lists, date_v1_submission))
+            records_df_tmp = pd.DataFrame(records_data,columns=['title','abstract', 'abstract_title_concats', 'url','authors', 'date_v1'])
 
             # Append to existing dataframe
             records_df = records_df.append(records_df_tmp, ignore_index=True)
 
-        self.records_df = records_df
+        # If just interested in one day, exclude replacements
+        if self.end == self.start:
+            # Include up to a week in advance for submissions created earlier, yet exclude replacements
+            datelist = [str(datetime.date.today()- datetime.timedelta(days=i)) for i in range(8)]
+            # Filter based on last few days
+            date_idxs = set([idx for idx,val in enumerate(list(map(lambda x: any([date in x for date in datelist]), records_df.date_v1))) if val])
+            self.records_df = records_df.iloc[list(date_idxs)]
+        else:
+            self.records_df = records_df
+
+
         self.num_records = len(self.records_df)
 
 
 
     def filter(self):
-        # So far brute force, include up to a week in advance for submissions created earlier, yet exclude replacements, doesn't work for beginning of months
-        #datelist = [str(self.end.replace(day=self.end.day-i)) for i in range(8)]
 
         # Check for entries matching keywords, authors and dates
         kwd_idxs = set([idx for idx,val in enumerate(list(map(lambda x: any([kwd in x for kwd in self.keywords]), self.records_df.abstract_title_concats))) if val])
         auth_idxs = set([idx for idx,val in enumerate(list(map(lambda x: any([auth in x for auth in self.keyauthors]), self.records_df.authors))) if val])
-        #date_idxs = set([idx for idx,val in enumerate(list(map(lambda x: any([date in x for date in datelist]), self.records_df.date))) if val])
 
         # Combine criteria
         idxs = set.union(kwd_idxs,auth_idxs)
-        #idxs = set.intersection(idxs,date_idxs)
         label = np.zeros(self.num_records)
         label[list(idxs)] = 1
 
@@ -146,31 +151,6 @@ class arxivscraper:
         self.num_records_filtered = len(self.records_df_filtered)
         self.filter_idxs = label
 
-#    def create_report(self):
-#        if self.num_records == 0:
-#            raise SubmissionError()
-#
-#
-#        if self.end != self.start:
-#            timespan = "from " + str(self.start) + " to " + str(self.end)
-#        else:
-#            timespan = "for " + str(self.end)
-#        # Compile message
-#        message = f"""Subject: ArXiv summary {timespan}
-#
-#Dear {self.name},
-#today there were {self.num_records} preprints on arXiv, out of which {self.num_records_filtered} were relevant for you.
-#_____________________________________________________________________________"""+ "\n"
-#
-#        for i in range(self.num_records_filtered):
-#
-#            header = " ".join(self.records_df_filtered.iloc[i].title.split()) + "\n" + "\n"
-#            body = self.records_df_filtered.iloc[i].abstract+ "\n"
-#            link = self.records_df_filtered.iloc[i].url + "\n"
-#            delimiter = """_____________________________________________________________________________"""+ "\n"
-#            message+=header+body+link+delimiter
-#
-#        return message
 
     def create_report(self):
         # If there are no submissions, raise error and stop
@@ -183,31 +163,31 @@ class arxivscraper:
         else:
             timespan = "for " + str(self.end)
 
+
         # Set up email message
         message = MIMEMultipart("alternative")
-        message["Subject"] = f"ArXiv summary {timespan}"
+        message["Subject"] = "ArXiv summary " + timespan
         message["From"] = self.email
         message["To"] = self.email
 
         # Create the plain-text and HTML version of the message
-        text = f"""Dear {self.name},
-        Today there were {self.num_records} preprints on arXiv, out of which {self.num_records_filtered} were relevant for you.
-        _____________________________________________________________________________"""+ "\n"
+        text = "Dear " + self.name +",\n" + "Today there were " + str(self.num_records) +" preprints on arXiv, out of which " + str(self.num_records_filtered) + " were relevant for you.\n" + u'\u2500' * 10 + "\n"
 
         # Add papers
         for i in range(self.num_records_filtered):
             header = " ".join(self.records_df_filtered.iloc[i].title.title().split()) + "\n" + "\n"
             body = self.records_df_filtered.iloc[i].abstract+ "\n"
             link = self.records_df_filtered.iloc[i].url + "\n"
-            delimiter = """_____________________________________________________________________________"""+ "\n"
+            delimiter = u'\u2500' * 10 + "\n"
             text+=header+body+link+delimiter
 
-        html = "<html><body><p>Dear " + self.name +",<br>Today there were "+str(self.num_records)+" preprints on arXiv, out of which "+str(self.num_records_filtered)+" were relevant for you.<br><hr></p>"""
+        html = "<html><body><p>Dear " + self.name +",<br>Today there were "+str(self.num_records)+" preprints for " + ', '.join(self.categories) + " on arXiv, out of which "+str(self.num_records_filtered)+" were relevant for you.<br><hr></p>"""
         # Add papers
         for i in range(self.num_records_filtered):
-            header = "<p><a href=" + self.records_df_filtered.iloc[i].url + ">" + " ".join(self.records_df_filtered.iloc[i].title.title().split()) + "</a><br><br>"
+            header = "<p><a href=" + self.records_df_filtered.iloc[i].url + ">" + " ".join(self.records_df_filtered.iloc[i].title.title().split()) + "</a><br>"
+            authors = "<i>" + self.records_df_filtered.iloc[i].authors.title() + "</i><br><br>"
             body = self.records_df_filtered.iloc[i].abstract+ "<br><hr></p>"
-            html+=header+body
+            html+=header+authors+body
         html += "</body></html>"
 
         # Turn these into plain/html MIMEText objects
@@ -221,6 +201,28 @@ class arxivscraper:
 
         return message
 
+    # Send email using python 3
+    def send_email_p3(self, message):
+        port = 465  # For SSL
+        # Create a secure SSL context
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
+            # Login
+            server.login(self.email, self.password)
+            # Send message
+            server.sendmail(self.email, self.email, message.as_string())
+
+    # Send email using python 2.7
+    def send_email_p27(self, message):
+        port = 465  # For SSL
+        # Create a secure SSL context
+        context = ssl.create_default_context()
+        server = smtplib.SMTP_SSL("smtp.gmail.com", port)
+        # Login
+        server.login(self.email, pwrd)
+        # Send message
+        server.sendmail(self.email, self.email, message.as_string())
+        server.quit()
 
     def send_report(self):
         # if no email address stored, print to terminal
@@ -242,15 +244,13 @@ class arxivscraper:
                 sys.stderr.write('No ArXiv submissions for selected timespan! \n')
                 exit(-1)
 
-            pwrd = input("Type your e-mail password and press enter: ")
-            port = 465  # For SSL
-            # Create a secure SSL context
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
-                # Login
-                server.login(self.email, pwrd)
-                # Send message
-                server.sendmail(self.email, self.email, message.as_string())
+            self.password = input("Type your e-mail password and press enter: ")
+
+            try: #python3
+                self.send_email_p3(message)
+            except: #python2.7
+                self.send_email_p27(message)
+
 
         # if email and password given, send message
         else:
@@ -261,14 +261,10 @@ class arxivscraper:
                 sys.stderr.write('No ArXiv submissions for selected timespan! \n')
                 exit(-1)
 
-            port = 465  # For SSL
-            # Create a secure SSL context
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
-                # Login
-                server.login(self.email, self.password)
-                # Send message
-                server.sendmail(self.email, self.email, message.as_string())
+            try: #python3
+                self.send_email_p3(message)
+            except: #python2.7
+                self.send_email_p27(message)
 
     def save(self, filenamerec="arxivrecords.csv", filenamefil="arxivfilters.csv"):
         # Store collected arxiv papers
