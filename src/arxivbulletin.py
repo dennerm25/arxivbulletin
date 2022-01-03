@@ -199,7 +199,7 @@ class arxivbulletin:
         message.attach(part1)
         message.attach(part2)
 
-        return message
+        return message, text
 
     # Send email using python 3
     def send_email_p3(self, message):
@@ -228,8 +228,8 @@ class arxivbulletin:
         # if no email address stored, print to terminal
         if self.email is None:
             try:
-                message = self.create_report()
-                print(message.get_payload()[0])
+                message, text = self.create_report()
+                print(text)
 
             except SubmissionError:
                 sys.stderr.write('No ArXiv submissions for selected timespan! \n')
@@ -238,7 +238,7 @@ class arxivbulletin:
         # if no password stored, ask user for access
         elif self.password is None:
             try:
-                message = self.create_report()
+                message, text = self.create_report()
 
             except SubmissionError:
                 sys.stderr.write('No ArXiv submissions for selected timespan! \n')
@@ -255,7 +255,7 @@ class arxivbulletin:
         # if email and password given, send message
         else:
             try:
-                message = self.create_report()
+                message, text = self.create_report()
 
             except SubmissionError:
                 sys.stderr.write('No ArXiv submissions for selected timespan! \n')
