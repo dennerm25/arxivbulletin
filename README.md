@@ -52,7 +52,7 @@ and run from the terminal once a day.
 In order to automate the execution of, for instance, `main.py` above, MacOS users can rely on `cron`. Running `crontab -e` in a terminal opens a cron file where a job can be added by `esc` + `i`. Adding the following line
 
 ```
-* * * * * /PathToPython /path/to/file/ArXivBulletin/main.py
+* * * * * /PathToPython /path/to/file/arXivbulletin/main.py
 ```
 runs the file `main.py` every minute. The timing can be adjusted by replacing the appropriate `*`, whereby the
 
@@ -68,7 +68,7 @@ Note that the execution might require terminal and cron to have full disk access
 
 More information (including troubleshooting and an untested option for windows users) can for instance be found [here](https://towardsdatascience.com/how-to-easily-automate-your-python-scripts-on-mac-and-windows-459388c9cc94).
 
-**Note that this will only work if your machine is awake, neither in stand-by nor if turned off.** 
+**Note that this will only work if your machine is awake, neither in stand-by nor turned off.** 
 
 ## License
 
